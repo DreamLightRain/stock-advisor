@@ -111,6 +111,12 @@ stock-advisor/
     └── data.json          # Persisted settings (auto-created)
 ```
 
+## Disclaimer
+
+**本软件仅供学习和研究使用，不构成任何投资建议。** 股市有风险，投资需谨慎。
+
+本软件使用的行情数据来源于公开的网络接口（东方财富、新浪、腾讯等）及基于公开协议的 TCP 数据源。数据版权归原始数据提供商所有。使用者应遵守相关服务条款，不得将本软件用于商业目的。
+
 ## License
 
-MIT
+GNU General Public License v3.0
