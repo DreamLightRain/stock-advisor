@@ -9,6 +9,8 @@ frontend/.wails/
 
 # Wails generated
 frontend/wailsjs/
+frontend/.wails/
+frontend/package.json.md5
 
 # Frontend build output
 frontend/dist/
