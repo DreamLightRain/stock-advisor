@@ -12,6 +12,7 @@ import (
 
 type EastMoneyFetcher struct {
 	client *http.Client
+	rl     *RateLimiter
 }
 
 type eastMoneyKLineResult struct {
@@ -23,6 +24,7 @@ type eastMoneyKLineResult struct {
 func NewEastMoneyFetcher() *EastMoneyFetcher {
 	return &EastMoneyFetcher{
 		client: &http.Client{Timeout: 15 * time.Second},
+		rl:     NewRateLimiter(300 * time.Millisecond),
 	}
 }
 
@@ -40,6 +42,7 @@ func (e *EastMoneyFetcher) setHeaders(req *http.Request) {
 func (e *EastMoneyFetcher) doWithRetry(url string) ([]byte, error) {
 	var lastErr error
 	for i := 0; i < 3; i++ {
+		e.rl.Wait()
 		req, err := http.NewRequest("GET", url, nil)
 		if err != nil {
 			return nil, err
@@ -56,9 +59,7 @@ func (e *EastMoneyFetcher) doWithRetry(url string) ([]byte, error) {
 		} else {
 			lastErr = err
 		}
-		if i < 2 {
-			time.Sleep(time.Duration(i+1) * 500 * time.Millisecond)
-		}
+		doWithBackoff(i)
 	}
 	return nil, fmt.Errorf("after 3 retries: %w", lastErr)
 }
@@ -88,22 +89,7 @@ func (e *EastMoneyFetcher) Search(keyword string) ([]SearchResult, error) {
 	}
 
 	url := fmt.Sprintf("https://searchadapter.eastmoney.com/api/suggest/get?input=%s&type=14&token=D43BF722C8E33BDC906FB84D85E326E8", url.QueryEscape(keyword))
-	req, err := http.NewRequest("GET", url, nil)
-	if err != nil {
-		return nil, err
-	}
-	e.setHeaders(req)
-	req.Header.Set("Referer", "https://www.eastmoney.com/")
-	req.Header.Set("Accept", "application/json, text/plain, */*")
-	req.Header.Set("Accept-Language", "zh-CN,zh;q=0.9,en;q=0.8")
-
-	resp, err := e.client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
+	body, err := e.doWithRetry(url)
 	if err != nil {
 		return nil, err
 	}

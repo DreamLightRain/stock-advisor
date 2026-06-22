@@ -12,16 +12,44 @@ import (
 
 type SinaFetcher struct {
 	client *http.Client
+	rl     *RateLimiter
 }
 
 func NewSinaFetcher() *SinaFetcher {
 	return &SinaFetcher{
 		client: &http.Client{Timeout: 5 * time.Second},
+		rl:     NewRateLimiter(300 * time.Millisecond),
 	}
 }
 
 func (s *SinaFetcher) Name() string {
 	return "新浪财经"
+}
+
+func (s *SinaFetcher) doGet(url string) ([]byte, error) {
+	var lastErr error
+	for i := 0; i < 3; i++ {
+		s.rl.Wait()
+		req, err := http.NewRequest("GET", url, nil)
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("Referer", "https://finance.sina.com.cn")
+		req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+		resp, err := s.client.Do(req)
+		if err == nil {
+			body, readErr := io.ReadAll(resp.Body)
+			resp.Body.Close()
+			if readErr == nil {
+				return body, nil
+			}
+			lastErr = readErr
+		} else {
+			lastErr = err
+		}
+		doWithBackoff(i)
+	}
+	return nil, fmt.Errorf("after 3 retries: %w", lastErr)
 }
 
 func (s *SinaFetcher) FetchRealTime(codes []string) (map[string]*RealTimeData, error) {
@@ -35,20 +63,7 @@ func (s *SinaFetcher) FetchRealTime(codes []string) (map[string]*RealTimeData, e
 	}
 
 	url := "https://hq.sinajs.cn/list=" + strings.Join(queryCodes, ",")
-	req, err := http.NewRequest("GET", url, nil)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Referer", "https://finance.sina.com.cn")
-	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
-
-	resp, err := s.client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
+	body, err := s.doGet(url)
 	if err != nil {
 		return nil, err
 	}
@@ -143,22 +158,7 @@ func (s *SinaFetcher) FetchMoneyFlow(code string, days int) ([]MoneyFlowItem, er
 
 	sinaCode := convertToSinaCode(code)
 	url := fmt.Sprintf("https://vip.stock.finance.sina.com.cn/api/json_v2.php/MoneyFlow/ssi_jsq?daima=%s&page=1&num=%d", sinaCode, days)
-
-	req, err := http.NewRequest("GET", url, nil)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Referer", "https://vip.stock.finance.sina.com.cn")
-	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
-	req.Header.Set("Accept", "application/json")
-
-	resp, err := s.client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
+	body, err := s.doGet(url)
 	if err != nil {
 		return nil, err
 	}
