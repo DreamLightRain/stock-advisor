@@ -49,6 +49,7 @@ type AppData struct {
 	RealTimePriority   []string                `json:"realTimePriority,omitempty"`
 	TTSProvider        string                  `json:"ttsProvider"`
 	TTSAPIKey          string                  `json:"ttsApiKey"`
+	TTSVoice           string                  `json:"ttsVoice"`
 }
 
 func NewStore(dataDir string) (*Store, error) {
@@ -383,21 +384,22 @@ func (s *Store) SaveDataSource(source string) error {
 	return s.Save(data)
 }
 
-func (s *Store) GetTTS() (provider, apiKey string) {
+func (s *Store) GetTTS() (provider, apiKey, voice string) {
 	data, err := s.Load()
 	if err != nil {
-		return "browser", ""
+		return "edge", "", "zh-CN-XiaoxiaoNeural"
 	}
-	return data.TTSProvider, data.TTSAPIKey
+	return data.TTSProvider, data.TTSAPIKey, data.TTSVoice
 }
 
-func (s *Store) SaveTTS(provider, apiKey string) error {
+func (s *Store) SaveTTS(provider, apiKey, voice string) error {
 	data, err := s.Load()
 	if err != nil {
 		return err
 	}
 	data.TTSProvider = provider
 	data.TTSAPIKey = apiKey
+	data.TTSVoice = voice
 	return s.Save(data)
 }
 
