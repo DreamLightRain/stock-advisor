@@ -5,7 +5,7 @@ import {
 import {
   SaveOutlined, ApiOutlined, RobotOutlined, ClockCircleOutlined, CheckCircleOutlined, CloseCircleOutlined, DeleteOutlined, BarChartOutlined, EyeOutlined, ArrowUpOutlined, ArrowDownOutlined, ReloadOutlined
 } from '@ant-design/icons'
-import { GetSettings, SaveSettings, TestAIConnection, ListModels, GetModelUsages, DeleteModelUsage, GetRealTimePriority, SaveRealTimePriority, GetSourceStats } from '../api/bridge'
+import { GetSettings, SaveSettings, TestAIConnection, ListModels, GetModelUsages, DeleteModelUsage, GetRealTimePriority, SaveRealTimePriority, GetSourceStats, GetTTSConfig, SaveTTSConfig } from '../api/bridge'
 
 const { Title, Text } = Typography
 
@@ -66,6 +66,11 @@ export default function Settings() {
         }
         form.setFieldsValue(vals)
         setProvider(settings.config.provider || 'openai')
+      }
+    })
+    GetTTSConfig().then((tts: any) => {
+      if (tts) {
+        form.setFieldsValue({ ttsProvider: tts.provider || 'browser', ttsApiKey: tts.apiKey || '' })
       }
     })
     reloadUsages()
@@ -165,6 +170,8 @@ export default function Settings() {
           await SaveRealTimePriority(priority)
           setPriorityDirty(false)
         }
+        // Save TTS settings
+        await SaveTTSConfig({ provider: values.ttsProvider || 'browser', apiKey: values.ttsApiKey || '' })
         message.success('设置已保存')
         reloadUsages()
       } else {
@@ -475,6 +482,29 @@ export default function Settings() {
             size="small"
             pagination={false}
           />
+        </Card>
+
+        <Card title={<><span role="img" aria-label="tts">🔊</span> 语音播报设置</>} style={{ marginBottom: 16 }}>
+          <Form.Item label="语音引擎" name="ttsProvider"
+            help="选择AI回复的语音播报方式。Browser TTS 使用浏览器内置语音，无需配置。"
+          >
+            <Select style={{ width: 280 }}>
+              <Select.Option value="browser">Browser TTS (浏览器内置)</Select.Option>
+              <Select.Option value="fish">Fish Audio S2</Select.Option>
+              <Select.Option value="qwen">Qwen3-TTS</Select.Option>
+            </Select>
+          </Form.Item>
+          <Form.Item noStyle shouldUpdate={(prev, cur) => prev.ttsProvider !== cur.ttsProvider}>
+            {({ getFieldValue }) => {
+              const p = getFieldValue('ttsProvider')
+              if (p === 'browser' || !p) return null
+              return (
+                <Form.Item label="API 密钥" name="ttsApiKey">
+                  <Input.Password placeholder={`输入 ${p === 'fish' ? 'Fish Audio' : 'Qwen3-TTS (DashScope)'} API Key`} visibilityToggle />
+                </Form.Item>
+              )
+            }}
+          </Form.Item>
         </Card>
 
         <Form.Item>

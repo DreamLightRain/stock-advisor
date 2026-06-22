@@ -47,6 +47,8 @@ type AppData struct {
 	ModelUsages        []ModelUsage            `json:"modelUsages"`
 	DataSource         string                  `json:"dataSource"`
 	RealTimePriority   []string                `json:"realTimePriority,omitempty"`
+	TTSProvider        string                  `json:"ttsProvider"`
+	TTSAPIKey          string                  `json:"ttsApiKey"`
 }
 
 func NewStore(dataDir string) (*Store, error) {
@@ -378,6 +380,24 @@ func (s *Store) SaveDataSource(source string) error {
 		return err
 	}
 	data.DataSource = source
+	return s.Save(data)
+}
+
+func (s *Store) GetTTS() (provider, apiKey string) {
+	data, err := s.Load()
+	if err != nil {
+		return "browser", ""
+	}
+	return data.TTSProvider, data.TTSAPIKey
+}
+
+func (s *Store) SaveTTS(provider, apiKey string) error {
+	data, err := s.Load()
+	if err != nil {
+		return err
+	}
+	data.TTSProvider = provider
+	data.TTSAPIKey = apiKey
 	return s.Save(data)
 }
 

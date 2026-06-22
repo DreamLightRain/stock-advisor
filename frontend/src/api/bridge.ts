@@ -180,6 +180,15 @@ export const GetLogs = (date: string, module: string) =>
 export const GetLogAIInterpretation = (date: string, module: string) =>
   safeCall('GetLogAIInterpretation', 'AI分析不可用', date, module)
 
+export const GetTTSConfig = () =>
+  safeCall('GetTTSConfig', { provider: 'browser', apiKey: '' })
+
+export const SaveTTSConfig = (cfg: any) =>
+  safeCall('SaveTTSConfig', '保存失败', cfg)
+
+export const TextToSpeech = (text: string, provider: string) =>
+  safeCall('TextToSpeech', '', text, provider)
+
 // SSE-based streaming for web mode
 export const AIChatStreamWeb = async (
   messagesJSON: string,

@@ -1136,6 +1136,37 @@ func (a *App) GetSourceStats() []*stock.SourceStats {
 	return a.fetcher.GetSourceStats()
 }
 
+// TTS methods
+type TTSConfig struct {
+	Provider string `json:"provider"`
+	APIKey   string `json:"apiKey"`
+}
+
+func (a *App) GetTTSConfig() *TTSConfig {
+	p, k := a.store.GetTTS()
+	return &TTSConfig{Provider: p, APIKey: k}
+}
+
+func (a *App) SaveTTSConfig(cfg TTSConfig) string {
+	if cfg.Provider == "" {
+		cfg.Provider = "browser"
+	}
+	if err := a.store.SaveTTS(cfg.Provider, cfg.APIKey); err != nil {
+		return err.Error()
+	}
+	return "ok"
+}
+
+func (a *App) TextToSpeech(text, provider string) string {
+	// Browser TTS is handled on frontend via Web Speech API
+	// Fish Audio / Qwen3 API requires external HTTP calls
+	// For now, return empty (frontend will use browser TTS as fallback)
+	if provider == "" || provider == "browser" {
+		return ""
+	}
+	return ""
+}
+
 // SwitchModel switches the AI model at runtime and persists to storage
 func (a *App) SwitchModel(provider, model, endpoint, apiKey string) string {
 	if a.aiClient == nil {
