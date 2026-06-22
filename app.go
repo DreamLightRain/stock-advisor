@@ -1144,15 +1144,21 @@ type TTSConfig struct {
 }
 
 func (a *App) GetTTSConfig() *TTSConfig {
-	p, k := a.store.GetTTS()
-	return &TTSConfig{Provider: p, APIKey: k, Voice: ""}
+	p, k, v := a.store.GetTTS()
+	if v == "" {
+		v = "zh-CN-XiaoxiaoNeural"
+	}
+	return &TTSConfig{Provider: p, APIKey: k, Voice: v}
 }
 
 func (a *App) SaveTTSConfig(cfg TTSConfig) string {
 	if cfg.Provider == "" {
 		cfg.Provider = "edge"
 	}
-	if err := a.store.SaveTTS(cfg.Provider, cfg.APIKey); err != nil {
+	if cfg.Voice == "" {
+		cfg.Voice = "zh-CN-XiaoxiaoNeural"
+	}
+	if err := a.store.SaveTTS(cfg.Provider, cfg.APIKey, cfg.Voice); err != nil {
 		return err.Error()
 	}
 	return "ok"
@@ -1170,6 +1176,11 @@ func (a *App) TextToSpeech(text, provider, voice string) string {
 			a.log.Error(logger.ModuleSystem, "Edge TTS failed: %v", err)
 			return ""
 		}
+		if len(audio) == 0 {
+			a.log.Error(logger.ModuleSystem, "Edge TTS: empty audio")
+			return ""
+		}
+		a.log.Info(logger.ModuleSystem, "Edge TTS: synthesized %d bytes", len(audio))
 		return stock.EncodeAudioBase64(audio)
 	case "browser":
 		return "" // frontend handles via Web Speech API

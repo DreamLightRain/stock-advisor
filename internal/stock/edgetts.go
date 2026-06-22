@@ -74,7 +74,7 @@ func (e *EdgeTTS) Synthesize(text string) ([]byte, error) {
 	u := fmt.Sprintf("wss://speech.platform.bing.com/consumer/speech/synthesize/readaloud/edge/v1?TrustedClientToken=%s&ConnectionId=%s",
 		url.QueryEscape(token), connID)
 
-	dialer := websocket.Dialer{HandshakeTimeout: 10 * time.Second}
+	dialer := websocket.Dialer{HandshakeTimeout: 15 * time.Second}
 	header := http.Header{}
 	header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
 	header.Set("Origin", "https://edge.microsoft.com")
@@ -85,8 +85,6 @@ func (e *EdgeTTS) Synthesize(text string) ([]byte, error) {
 		return nil, fmt.Errorf("edge ws dial: %w", err)
 	}
 	defer conn.Close()
-
-	_ = conn.SetReadDeadline(time.Now().Add(30 * time.Second))
 
 	reqID := uuid.New().String()
 	ssml := fmt.Sprintf(`<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xmlns:mstts='https://www.w3.org/2001/mstts' xml:lang='zh-CN'><voice name='%s'><prosody rate='%s' pitch='+0Hz' volume='%s'>%s</prosody></voice></speak>`,
@@ -103,29 +101,23 @@ func (e *EdgeTTS) Synthesize(text string) ([]byte, error) {
 	turnEnd := []byte("Path:turn.end")
 
 	for {
-		_, data, err := conn.ReadMessage()
+		mt, data, err := conn.ReadMessage()
 		if err != nil {
 			break
 		}
 
-		// Check for binary audio data (starts after headers)
-		if len(data) >= 2 && data[0] != 'X' && data[0] != 'P' && data[0] != 'C' {
-			// Find the double newline that separates headers from body
-			idx := indexOf(data, []byte("\r\n\r\n"))
-			if idx > 0 {
+		if mt == websocket.BinaryMessage {
+			// Binary messages contain audio data (headers + mp3 body, separated by \r\n\r\n)
+			// Edge TTS sends headers like "Path:audio\r\nContent-Type:audio/mpeg\r\n\r\n" then raw mp3
+			if idx := indexOf(data, []byte("\r\n\r\n")); idx > 0 {
 				body := data[idx+4:]
 				if len(body) > 0 {
 					audio = append(audio, body...)
 				}
-				// Check if this is a turn end message
-				if contains(data[:idx], turnEnd) {
-					break
-				}
 			}
 		}
 
-		// Check text messages for turn end
-		if contains(data, turnEnd) {
+		if mt == websocket.TextMessage && contains(data, turnEnd) {
 			break
 		}
 	}
