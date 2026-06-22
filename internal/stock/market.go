@@ -48,11 +48,13 @@ type SectorMoneyFlow struct {
 
 type MarketFetcher struct {
 	client *http.Client
+	rl     *RateLimiter
 }
 
 func NewMarketFetcher() *MarketFetcher {
 	return &MarketFetcher{
 		client: &http.Client{Timeout: 15 * time.Second},
+		rl:     NewRateLimiter(300 * time.Millisecond),
 	}
 }
 
@@ -65,6 +67,7 @@ func (m *MarketFetcher) setHeaders(req *http.Request) {
 func (m *MarketFetcher) doGet(url string) ([]byte, error) {
 	var lastErr error
 	for i := 0; i < 3; i++ {
+		m.rl.Wait()
 		req, err := http.NewRequest("GET", url, nil)
 		if err != nil {
 			return nil, err
@@ -82,9 +85,7 @@ func (m *MarketFetcher) doGet(url string) ([]byte, error) {
 		} else {
 			lastErr = err
 		}
-		if i < 2 {
-			time.Sleep(time.Duration(i+1) * 500 * time.Millisecond)
-		}
+		doWithBackoff(i)
 	}
 	return nil, fmt.Errorf("after 3 retries: %w", lastErr)
 }

@@ -11,16 +11,44 @@ import (
 
 type TencentFetcher struct {
 	client *http.Client
+	rl     *RateLimiter
 }
 
 func NewTencentFetcher() *TencentFetcher {
 	return &TencentFetcher{
 		client: &http.Client{Timeout: 5 * time.Second},
+		rl:     NewRateLimiter(300 * time.Millisecond),
 	}
 }
 
 func (t *TencentFetcher) Name() string {
 	return "腾讯财经"
+}
+
+func (t *TencentFetcher) doGet(url string) ([]byte, error) {
+	var lastErr error
+	for i := 0; i < 3; i++ {
+		t.rl.Wait()
+		req, err := http.NewRequest("GET", url, nil)
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("Referer", "https://gu.qq.com")
+		req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+		resp, err := t.client.Do(req)
+		if err == nil {
+			body, readErr := io.ReadAll(resp.Body)
+			resp.Body.Close()
+			if readErr == nil {
+				return body, nil
+			}
+			lastErr = readErr
+		} else {
+			lastErr = err
+		}
+		doWithBackoff(i)
+	}
+	return nil, fmt.Errorf("after 3 retries: %w", lastErr)
 }
 
 func (t *TencentFetcher) FetchRealTime(codes []string) (map[string]*RealTimeData, error) {
@@ -34,20 +62,7 @@ func (t *TencentFetcher) FetchRealTime(codes []string) (map[string]*RealTimeData
 	}
 
 	url := "https://qt.gtimg.cn/q=" + strings.Join(queryCodes, ",")
-	req, err := http.NewRequest("GET", url, nil)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Referer", "https://gu.qq.com")
-	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
-
-	resp, err := t.client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
+	body, err := t.doGet(url)
 	if err != nil {
 		return nil, err
 	}
@@ -64,18 +79,7 @@ func (t *TencentFetcher) FetchKLine(code string, days int) ([]KLine, error) {
 	}
 	queryCode := convertToTencentCode(code)
 	url := fmt.Sprintf("https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param=%s,day,,,%d,qfq", queryCode, days)
-	req, err := http.NewRequest("GET", url, nil)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Referer", "https://finance.qq.com")
-	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
-	resp, err := t.client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-	body, err := io.ReadAll(resp.Body)
+	body, err := t.doGet(url)
 	if err != nil {
 		return nil, err
 	}

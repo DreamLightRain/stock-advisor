@@ -152,25 +152,43 @@ func (a *App) GetTimeSharingData(code string) []stock.KLine {
 	return data
 }
 
+const cacheTTL = 30 * time.Second // fresh cache TTL
+
+func (a *App) getCachedMoneyFlow(code string) ([]stock.MoneyFlowItem, bool) {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	cached, ok := a.moneyFlowCache[code]
+	if !ok {
+		return nil, false
+	}
+	return cached.items, time.Since(cached.time) < cacheTTL
+}
+
+func (a *App) setCachedMoneyFlow(code string, data []stock.MoneyFlowItem) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.moneyFlowCache == nil {
+		a.moneyFlowCache = make(map[string]moneyFlowCacheEntry)
+	}
+	a.moneyFlowCache[code] = moneyFlowCacheEntry{items: data, time: time.Now()}
+}
+
 func (a *App) GetMoneyFlow(code string, days int) []stock.MoneyFlowItem {
+	// Check cache first
+	if cached, fresh := a.getCachedMoneyFlow(code); fresh {
+		return cached
+	}
+
 	data, err := a.fetcher.GetMoneyFlow(code, days)
 	if err != nil {
 		a.log.Error(logger.ModuleData, "GetMoneyFlow %s error: %v", code, err)
-		a.mu.RLock()
-		cached, ok := a.moneyFlowCache[code]
-		a.mu.RUnlock()
-		if ok {
-			return cached.items
+		if cached, _ := a.getCachedMoneyFlow(code); cached != nil {
+			return cached
 		}
 		return nil
 	}
 	if len(data) > 0 {
-		a.mu.Lock()
-		if a.moneyFlowCache == nil {
-			a.moneyFlowCache = make(map[string]moneyFlowCacheEntry)
-		}
-		a.moneyFlowCache[code] = moneyFlowCacheEntry{items: data, time: time.Now()}
-		a.mu.Unlock()
+		a.setCachedMoneyFlow(code, data)
 	}
 	return data
 }
@@ -185,12 +203,17 @@ func (a *App) GetStockIndustry(code string) string {
 }
 
 func (a *App) GetMarketSummary() *stock.MarketSummary {
+	a.mu.RLock()
+	cached := a.marketSummary
+	cachedTime := a.marketSummaryTime
+	a.mu.RUnlock()
+	if cached != nil && time.Since(cachedTime) < cacheTTL {
+		return cached
+	}
+
 	data, err := a.fetcher.GetMarketSummary()
 	if err != nil {
 		a.log.Error(logger.ModuleData, "GetMarketSummary error: %v", err)
-		a.mu.RLock()
-		cached := a.marketSummary
-		a.mu.RUnlock()
 		return cached
 	}
 	if data != nil && (len(data.Indices) > 0 || len(data.MoneyFlow) > 0) {
@@ -200,10 +223,7 @@ func (a *App) GetMarketSummary() *stock.MarketSummary {
 		a.mu.Unlock()
 		return data
 	}
-	// empty data from API → return cache if available
-	a.mu.RLock()
-	cached := a.marketSummary
-	a.mu.RUnlock()
+	// empty data → stale cache better than nothing
 	if cached != nil {
 		return cached
 	}
@@ -221,12 +241,17 @@ func (a *App) GetIndexMoneyFlow(code string, days int) []stock.MarketMoneyFlow {
 }
 
 func (a *App) GetSectorMoneyFlow() []stock.SectorMoneyFlow {
+	a.mu.RLock()
+	cached := a.sectorMoneyFlow
+	cachedTime := a.sectorMoneyFlowTime
+	a.mu.RUnlock()
+	if cached != nil && time.Since(cachedTime) < cacheTTL {
+		return cached
+	}
+
 	data, err := a.fetcher.GetSectorMoneyFlow()
 	if err != nil {
 		a.log.Error(logger.ModuleData, "GetSectorMoneyFlow error: %v", err)
-		a.mu.RLock()
-		cached := a.sectorMoneyFlow
-		a.mu.RUnlock()
 		return cached
 	}
 	if len(data) > 0 {
@@ -236,9 +261,6 @@ func (a *App) GetSectorMoneyFlow() []stock.SectorMoneyFlow {
 		a.mu.Unlock()
 		return data
 	}
-	a.mu.RLock()
-	cached := a.sectorMoneyFlow
-	a.mu.RUnlock()
 	if cached != nil {
 		return cached
 	}
@@ -247,17 +269,23 @@ func (a *App) GetSectorMoneyFlow() []stock.SectorMoneyFlow {
 
 func (a *App) GetSectorMoneyFlowByDate(date string) []stock.SectorMoneyFlow {
 	a.log.Info(logger.ModuleData, "GetSectorMoneyFlowByDate date=%s", date)
+	// For today, use cached if fresh
+	if date == "" || date == time.Now().Format("2006-01-02") {
+		a.mu.RLock()
+		if a.sectorMoneyFlow != nil && time.Since(a.sectorMoneyFlowTime) < cacheTTL {
+			cached := a.sectorMoneyFlow
+			a.mu.RUnlock()
+			return cached
+		}
+		a.mu.RUnlock()
+	}
 	data, err := a.fetcher.GetSectorMoneyFlowByDate(date)
 	if err != nil {
 		a.log.Error(logger.ModuleData, "GetSectorMoneyFlowByDate %s error: %v", date, err)
-		// fallback to cached or market-level data
 		a.mu.RLock()
 		cached := a.sectorMoneyFlow
 		a.mu.RUnlock()
-		if cached != nil {
-			return cached
-		}
-		return nil
+		return cached
 	}
 	if len(data) > 0 {
 		a.mu.Lock()

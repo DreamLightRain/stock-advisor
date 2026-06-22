@@ -30,7 +30,8 @@ type FetcherManager struct {
 	realTimePriority  []string // custom priority order for real-time data
 	mu                sync.Mutex
 
-	stats map[string]*SourceStats
+	stats    map[string]*SourceStats
+	health   map[string]int // consecutive failures per source
 }
 
 func NewFetcherManager() *FetcherManager {
@@ -42,6 +43,7 @@ func NewFetcherManager() *FetcherManager {
 		tdx:        NewTdxFetcher(),
 		dataSource: "auto",
 		stats:      make(map[string]*SourceStats),
+		health:     make(map[string]int),
 	}
 }
 
@@ -90,9 +92,23 @@ func (fm *FetcherManager) trackResult(name string, err error) {
 	if err != nil {
 		s.Failures++
 		s.LastError = err.Error()
+		fm.health[name]++
+		// Reset health of all other sources to give them a chance
+		for n := range fm.health {
+			if n != name {
+				fm.health[n] = 0
+			}
+		}
 	} else {
 		s.Success++
+		fm.health[name] = 0 // reset on success
 	}
+}
+
+func (fm *FetcherManager) isHealthy(name string) bool {
+	fm.mu.Lock()
+	defer fm.mu.Unlock()
+	return fm.health[name] < 3 // 3 consecutive failures = unhealthy
 }
 
 func (fm *FetcherManager) sourceFetcher(name string) StockFetcher {
@@ -139,6 +155,10 @@ func (fm *FetcherManager) GetRealTime(codes []string) (map[string]*RealTimeData,
 	for _, name := range priority {
 		f := fm.sourceFetcher(name)
 		if f == nil {
+			continue
+		}
+		if !fm.isHealthy(f.Name()) {
+			log.Printf("[%s] skipping: unhealthy (3+ consecutive failures)", f.Name())
 			continue
 		}
 		result, err := f.FetchRealTime(codes)
