@@ -186,8 +186,8 @@ export const GetTTSConfig = () =>
 export const SaveTTSConfig = (cfg: any) =>
   safeCall('SaveTTSConfig', '保存失败', cfg)
 
-export const TextToSpeech = (text: string, provider: string) =>
-  safeCall('TextToSpeech', '', text, provider)
+export const TextToSpeech = (text: string, provider: string, voice: string = '') =>
+  safeCall('TextToSpeech', '', text, provider, voice)
 
 // SSE-based streaming for web mode
 export const AIChatStreamWeb = async (

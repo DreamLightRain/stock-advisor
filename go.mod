@@ -5,6 +5,8 @@ go 1.23
 toolchain go1.24.5
 
 require (
+	github.com/google/uuid v1.6.0
+	github.com/gorilla/websocket v1.5.3
 	github.com/injoyai/tdx v0.0.82
 	github.com/wailsapp/wails/v2 v2.11.0
 )
@@ -19,8 +21,6 @@ require (
 	github.com/goccy/go-json v0.8.1 // indirect
 	github.com/godbus/dbus/v5 v5.1.0 // indirect
 	github.com/golang/snappy v0.0.4 // indirect
-	github.com/google/uuid v1.6.0 // indirect
-	github.com/gorilla/websocket v1.5.3 // indirect
 	github.com/injoyai/base v1.2.20 // indirect
 	github.com/injoyai/conv v1.2.5 // indirect
 	github.com/injoyai/ios v1.2.2 // indirect
