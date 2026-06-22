@@ -3,7 +3,7 @@ import { Input, Button, Card, Typography, Spin, Space, Tag, Row, Col, Switch, Se
 import { SendOutlined, RobotOutlined, BulbOutlined, SearchOutlined, ClearOutlined, EditOutlined, SoundOutlined } from '@ant-design/icons'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import { AIChatWithHistory, GetSelfSelectStocks, GetSettings, GetModelUsages, SwitchModel, AIChatStreamWeb, GetTTSConfig } from '../api/bridge'
+import { AIChatWithHistory, GetSelfSelectStocks, GetSettings, GetModelUsages, SwitchModel, AIChatStreamWeb, GetTTSConfig, TextToSpeech } from '../api/bridge'
 import { isWebMode } from '../api/auth'
 
 const { Text, Title, Paragraph } = Typography
@@ -72,31 +72,65 @@ export default function AIChat() {
   const [promptModalOpen, setPromptModalOpen] = useState(false)
   const [systemPrompt, setSystemPrompt] = useState(() => localStorage.getItem(PROMPT_KEY) || PRESET_PROMPTS['专业分析师'])
   const [selectedPreset, setSelectedPreset] = useState('专业分析师')
-  const [ttsProvider, setTtsProvider] = useState('browser')
+  const [ttsProvider, setTtsProvider] = useState('edge')
+  const [ttsVoice, setTtsVoice] = useState('zh-CN-XiaoxiaoNeural')
   const [speakingIndex, setSpeakingIndex] = useState<number | null>(null)
+  const ttsAudioRef = useRef<HTMLAudioElement | null>(null)
   const [streamingContent, setStreamingContent] = useState('')
   const [isStreaming, setIsStreaming] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     GetTTSConfig().then((cfg: any) => {
-      if (cfg?.provider) setTtsProvider(cfg.provider)
+      if (cfg) {
+        setTtsProvider(cfg.provider || 'edge')
+        setTtsVoice(cfg.voice || 'zh-CN-XiaoxiaoNeural')
+      }
     })
   }, [])
 
-  const playTTS = (text: string, idx: number) => {
-    if (speakingIndex !== null) {
-      window.speechSynthesis.cancel()
-      if (speakingIndex === idx) { setSpeakingIndex(null); return }
+  const playTTS = async (text: string, idx: number) => {
+    // Stop if already playing this message
+    if (speakingIndex === idx) {
+      if (ttsAudioRef.current) { ttsAudioRef.current.pause(); ttsAudioRef.current = null }
+      if (ttsProvider === 'browser') window.speechSynthesis.cancel()
+      setSpeakingIndex(null)
+      return
     }
-    if (ttsProvider === 'browser' || !ttsProvider) {
-      const utterance = new SpeechSynthesisUtterance(text.replace(/[#*`\[\]]/g, ''))
+
+    // Stop any current playback
+    if (ttsAudioRef.current) { ttsAudioRef.current.pause(); ttsAudioRef.current = null }
+    if (ttsProvider === 'browser') window.speechSynthesis.cancel()
+
+    const cleanText = text.replace(/[#*`\[\]]/g, '')
+
+    if (ttsProvider === 'browser') {
+      const utterance = new SpeechSynthesisUtterance(cleanText)
       utterance.lang = 'zh-CN'
       utterance.rate = 1.1
       utterance.onend = () => setSpeakingIndex(null)
       utterance.onerror = () => setSpeakingIndex(null)
       setSpeakingIndex(idx)
       window.speechSynthesis.speak(utterance)
+      return
+    }
+
+    // Edge TTS (and others) via backend
+    setSpeakingIndex(idx)
+    try {
+      const b64 = await TextToSpeech(cleanText, ttsProvider, ttsVoice)
+      if (!b64) {
+        message.warning('语音合成失败，请检查设置')
+        setSpeakingIndex(null)
+        return
+      }
+      const audio = new Audio('data:audio/mp3;base64,' + b64)
+      ttsAudioRef.current = audio
+      audio.onended = () => { setSpeakingIndex(null); ttsAudioRef.current = null }
+      audio.onerror = () => { setSpeakingIndex(null); ttsAudioRef.current = null }
+      audio.play()
+    } catch {
+      setSpeakingIndex(null)
     }
   }
 

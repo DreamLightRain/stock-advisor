@@ -70,7 +70,7 @@ export default function Settings() {
     })
     GetTTSConfig().then((tts: any) => {
       if (tts) {
-        form.setFieldsValue({ ttsProvider: tts.provider || 'browser', ttsApiKey: tts.apiKey || '' })
+        form.setFieldsValue({ ttsProvider: tts.provider || 'edge', ttsVoice: tts.voice || 'zh-CN-XiaoxiaoNeural', ttsApiKey: tts.apiKey || '' })
       }
     })
     reloadUsages()
@@ -171,7 +171,7 @@ export default function Settings() {
           setPriorityDirty(false)
         }
         // Save TTS settings
-        await SaveTTSConfig({ provider: values.ttsProvider || 'browser', apiKey: values.ttsApiKey || '' })
+        await SaveTTSConfig({ provider: values.ttsProvider || 'edge', apiKey: values.ttsApiKey || '', voice: values.ttsVoice || 'zh-CN-XiaoxiaoNeural' })
         message.success('设置已保存')
         reloadUsages()
       } else {
@@ -486,18 +486,35 @@ export default function Settings() {
 
         <Card title={<><span role="img" aria-label="tts">🔊</span> 语音播报设置</>} style={{ marginBottom: 16 }}>
           <Form.Item label="语音引擎" name="ttsProvider"
-            help="选择AI回复的语音播报方式。Browser TTS 使用浏览器内置语音，无需配置。"
+            help="Edge TTS 使用微软 Neural 音色，免费零配置，接近真人。"
           >
             <Select style={{ width: 280 }}>
+              <Select.Option value="edge">Edge TTS (微软 Neural，推荐)</Select.Option>
               <Select.Option value="browser">Browser TTS (浏览器内置)</Select.Option>
-              <Select.Option value="fish">Fish Audio S2</Select.Option>
-              <Select.Option value="qwen">Qwen3-TTS</Select.Option>
+              <Select.Option value="fish">Fish Audio S2 (需 API Key)</Select.Option>
+              <Select.Option value="qwen">Qwen3-TTS (需 API Key)</Select.Option>
             </Select>
           </Form.Item>
           <Form.Item noStyle shouldUpdate={(prev, cur) => prev.ttsProvider !== cur.ttsProvider}>
             {({ getFieldValue }) => {
               const p = getFieldValue('ttsProvider')
-              if (p === 'browser' || !p) return null
+              if (p === 'edge' || !p) {
+                return (
+                  <Form.Item label="音色选择" name="ttsVoice">
+                    <Select style={{ width: 320 }} placeholder="zh-CN-XiaoxiaoNeural (温柔女声)">
+                      <Select.Option value="zh-CN-XiaoxiaoNeural">Xiaoxiao - 温柔女声 (推荐)</Select.Option>
+                      <Select.Option value="zh-CN-YunyangNeural">Yunyang - 沉稳男声，适合财经播报</Select.Option>
+                      <Select.Option value="zh-CN-YunxiNeural">Yunxi - 自然男声</Select.Option>
+                      <Select.Option value="zh-CN-YunjianNeural">Yunjian - 自信男声</Select.Option>
+                      <Select.Option value="zh-CN-XiaoyiNeural">Xiaoyi - 活泼女声</Select.Option>
+                      <Select.Option value="zh-CN-YunzeNeural">Yunze - 少年音</Select.Option>
+                      <Select.Option value="zh-CN-XiaohanNeural">Xiaohan - 温婉女声</Select.Option>
+                      <Select.Option value="zh-CN-XiaomengNeural">Xiaomeng - 可爱女声</Select.Option>
+                    </Select>
+                  </Form.Item>
+                )
+              }
+              if (p === 'browser') return null
               return (
                 <Form.Item label="API 密钥" name="ttsApiKey">
                   <Input.Password placeholder={`输入 ${p === 'fish' ? 'Fish Audio' : 'Qwen3-TTS (DashScope)'} API Key`} visibilityToggle />

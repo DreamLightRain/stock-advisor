@@ -1140,16 +1140,17 @@ func (a *App) GetSourceStats() []*stock.SourceStats {
 type TTSConfig struct {
 	Provider string `json:"provider"`
 	APIKey   string `json:"apiKey"`
+	Voice    string `json:"voice"`
 }
 
 func (a *App) GetTTSConfig() *TTSConfig {
 	p, k := a.store.GetTTS()
-	return &TTSConfig{Provider: p, APIKey: k}
+	return &TTSConfig{Provider: p, APIKey: k, Voice: ""}
 }
 
 func (a *App) SaveTTSConfig(cfg TTSConfig) string {
 	if cfg.Provider == "" {
-		cfg.Provider = "browser"
+		cfg.Provider = "edge"
 	}
 	if err := a.store.SaveTTS(cfg.Provider, cfg.APIKey); err != nil {
 		return err.Error()
@@ -1157,14 +1158,24 @@ func (a *App) SaveTTSConfig(cfg TTSConfig) string {
 	return "ok"
 }
 
-func (a *App) TextToSpeech(text, provider string) string {
-	// Browser TTS is handled on frontend via Web Speech API
-	// Fish Audio / Qwen3 API requires external HTTP calls
-	// For now, return empty (frontend will use browser TTS as fallback)
-	if provider == "" || provider == "browser" {
+func (a *App) TextToSpeech(text, provider, voice string) string {
+	if text == "" {
 		return ""
 	}
-	return ""
+	switch provider {
+	case "edge", "":
+		tts := stock.NewEdgeTTS(voice)
+		audio, err := tts.Synthesize(text)
+		if err != nil {
+			a.log.Error(logger.ModuleSystem, "Edge TTS failed: %v", err)
+			return ""
+		}
+		return stock.EncodeAudioBase64(audio)
+	case "browser":
+		return "" // frontend handles via Web Speech API
+	default:
+		return "" // API-based TTS not yet implemented
+	}
 }
 
 // SwitchModel switches the AI model at runtime and persists to storage
