@@ -1,9 +1,9 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { Input, Button, Card, Typography, Spin, Space, Tag, Row, Col, Switch, Select, message, Modal } from 'antd'
-import { SendOutlined, RobotOutlined, BulbOutlined, SearchOutlined, ClearOutlined, EditOutlined } from '@ant-design/icons'
+import { SendOutlined, RobotOutlined, BulbOutlined, SearchOutlined, ClearOutlined, EditOutlined, SoundOutlined } from '@ant-design/icons'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import { AIChatWithHistory, GetSelfSelectStocks, GetSettings, GetModelUsages, SwitchModel, AIChatStreamWeb } from '../api/bridge'
+import { AIChatWithHistory, GetSelfSelectStocks, GetSettings, GetModelUsages, SwitchModel, AIChatStreamWeb, GetTTSConfig } from '../api/bridge'
 import { isWebMode } from '../api/auth'
 
 const { Text, Title, Paragraph } = Typography
@@ -72,9 +72,33 @@ export default function AIChat() {
   const [promptModalOpen, setPromptModalOpen] = useState(false)
   const [systemPrompt, setSystemPrompt] = useState(() => localStorage.getItem(PROMPT_KEY) || PRESET_PROMPTS['专业分析师'])
   const [selectedPreset, setSelectedPreset] = useState('专业分析师')
+  const [ttsProvider, setTtsProvider] = useState('browser')
+  const [speakingIndex, setSpeakingIndex] = useState<number | null>(null)
   const [streamingContent, setStreamingContent] = useState('')
   const [isStreaming, setIsStreaming] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    GetTTSConfig().then((cfg: any) => {
+      if (cfg?.provider) setTtsProvider(cfg.provider)
+    })
+  }, [])
+
+  const playTTS = (text: string, idx: number) => {
+    if (speakingIndex !== null) {
+      window.speechSynthesis.cancel()
+      if (speakingIndex === idx) { setSpeakingIndex(null); return }
+    }
+    if (ttsProvider === 'browser' || !ttsProvider) {
+      const utterance = new SpeechSynthesisUtterance(text.replace(/[#*`\[\]]/g, ''))
+      utterance.lang = 'zh-CN'
+      utterance.rate = 1.1
+      utterance.onend = () => setSpeakingIndex(null)
+      utterance.onerror = () => setSpeakingIndex(null)
+      setSpeakingIndex(idx)
+      window.speechSynthesis.speak(utterance)
+    }
+  }
 
   // Load settings, model usages, and self stocks on mount
   useEffect(() => {
@@ -432,6 +456,20 @@ export default function AIChat() {
                 )}
               </div>
               {renderContent(msg.content)}
+              {msg.role === 'assistant' && (
+                <Button
+                  type="text"
+                  size="small"
+                  icon={<SoundOutlined />}
+                  onClick={() => playTTS(msg.content, i)}
+                  style={{
+                    marginTop: 4, fontSize: 12, color: speakingIndex === i ? '#1677ff' : '#999',
+                    padding: '2px 6px', height: 'auto',
+                  }}
+                >
+                  {speakingIndex === i ? '停止' : '朗读'}
+                </Button>
+              )}
             </div>
           </div>
         ))}
